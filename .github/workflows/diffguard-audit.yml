@@ -1,0 +1,38 @@
+name: DiffGuard Contract Audit
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Slither and Solidity compiler
+        run: |
+          pip install slither-analyzer solc-select
+          solc-select install 0.8.20
+          solc-select use 0.8.20
+
+      - name: Run Monad Contention Detector
+        run: |
+          for file in contracts/*.sol; do
+            echo "Scanning $file"
+            python scripts/monad_contention_detector.py "$file" | tee -a contention_results.json
+          done
+
+      - name: Check for critical findings
+        run: |
+          if grep -q '"severity": "HIGH"' contention_results.json; then
+            echo "::error::HIGH severity Monad parallel-contention finding detected - blocking merge."
+            exit 1
+          fi
+          echo "No blocking findings - audit passed."

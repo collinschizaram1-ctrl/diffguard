@@ -1,0 +1,6 @@
+{
+  "name": "Diff-Guard",
+  "description": "Continuous bytecode security, static check emulations, and RPC-based smart contract threat protection suite for Monad.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

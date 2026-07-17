@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-monad-deep: #0D0F14;
+  --color-monad-dark: #14171E;
+  --color-monad-purple: #0088FF;
+  --color-monad-berry: #1A8CFF;
+  --color-monad-neon: #00A6FF;
+  --color-monad-grid: #202533;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--color-monad-deep);
+    color: #E2E8F0;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Custom scrollbars for the IDE look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #14171E;
+}
+::-webkit-scrollbar-thumb {
+  background: #2D3346;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #0088FF;
+}
+
