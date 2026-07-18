@@ -281,6 +281,75 @@ async function startServer() {
     });
   }
 
+// Helper to parse Etherscan/MonadScan SourceCode field (which can be flat Solidity code or standard JSON input)
+function parseSourceCode(sourceCodeStr: string, contractName: string): { name: string; path: string; content: string }[] {
+  const files: { name: string; path: string; content: string }[] = [];
+  const trimmed = sourceCodeStr.trim();
+
+  if (!trimmed) {
+    return files;
+  }
+
+  // Check if it's standard-json-input format wrapped in double curly braces {{...}}
+  if (trimmed.startsWith("{{") && trimmed.endsWith("}}")) {
+    try {
+      const jsonStr = trimmed.substring(1, trimmed.length - 1);
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.sources) {
+        for (const [filePath, fileObj] of Object.entries(parsed.sources)) {
+          const content = (fileObj as any).content || "";
+          if (content) {
+            const fileName = filePath.split("/").pop() || "Contract.sol";
+            files.push({ name: fileName, path: filePath, content });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing standard-json-input double braces:", e);
+    }
+  }
+
+  // Check if it's single-wrapped JSON {...}
+  if (files.length === 0 && trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.sources) {
+        for (const [filePath, fileObj] of Object.entries(parsed.sources)) {
+          const content = (fileObj as any).content || "";
+          if (content) {
+            const fileName = filePath.split("/").pop() || "Contract.sol";
+            files.push({ name: fileName, path: filePath, content });
+          }
+        }
+      } else if (typeof parsed === 'object') {
+        for (const [key, val] of Object.entries(parsed)) {
+          if (typeof val === 'string') {
+            const fileName = key.split("/").pop() || "Contract.sol";
+            files.push({ name: fileName, path: key, content: val });
+          } else if (val && typeof val === 'object' && (val as any).content) {
+            const fileName = key.split("/").pop() || "Contract.sol";
+            files.push({ name: fileName, path: key, content: (val as any).content });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing single brace JSON source code:", e);
+    }
+  }
+
+  // If still no files parsed, treat it as a single flat contract string
+  if (files.length === 0) {
+    const defaultName = contractName ? `${contractName}.sol` : "Contract.sol";
+    files.push({
+      name: defaultName,
+      path: `contracts/${defaultName}`,
+      content: sourceCodeStr
+    });
+  }
+
+  return files;
+}
+
   // --- API ROUTE: Get Verified Contract Files from Monad Sourcify ---
   app.get("/api/monad-sourcify/:address", async (req, res) => {
     const { address } = req.params;
@@ -300,64 +369,80 @@ async function startServer() {
       });
     }
 
-    // Try fetching from the real Sourcify-api-monad (or fallback to staging/official Sourcify)
+    // Call the MonadScan API to get source code
     try {
-      const url = `https://sourcify-api-monad.blockvision.org/files/any/10143/${cleanAddress}`;
-      const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
+       const apiKey = process.env.MONADSCAN_API_KEY || "";
+       const maskedKey = apiKey ? (apiKey.length > 6 ? apiKey.slice(0, 4) + "..." + apiKey.slice(-2) : "...") : "[EMPTY]";
+       
+       // Etherscan API V2 link requested by user: starts with https://api.etherscan.io, has /v2/ in the middle, and &chainid=1 at the end
+       const url = `https://api.etherscan.io/v2/api?module=contract&action=getsourcecode&address=${cleanAddress}&apikey=${apiKey}&chainid=1`;
+       const maskedUrl = `https://api.etherscan.io/v2/api?module=contract&action=getsourcecode&address=${cleanAddress}&apikey=${maskedKey}&chainid=1`;
+       
+       console.log(`[ETHERSCAN V2 FETCH] Requesting URL: ${maskedUrl}`);
+       console.error('🔴 CALLING ETHERSCAN API V2:', url);
+       
+       let response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+       console.error('🔴 ETHERSCAN V2 RESPONSE STATUS:', response.status);
+       
+       if (!response.ok) {
+         throw new Error(`Etherscan API returned status ${response.status}`);
+       }
+       
+       let rawText = await response.text();
+       console.log(`[ETHERSCAN V2 FETCH] Raw Response Body: ${rawText}`);
+       let data = JSON.parse(rawText);
+       
+       // Fallback for Monad Testnet (chain ID 10143) if the contract is not verified/found on Mainnet
+       const isVerifiedOnMainnet = data.status === "1" && 
+                                   Array.isArray(data.result) && 
+                                   data.result.length > 0 && 
+                                   data.result[0].SourceCode && 
+                                   data.result[0].SourceCode.trim() !== "";
+                                   
+       if (!isVerifiedOnMainnet) {
+         console.log(`[ETHERSCAN V2 FETCH] Not verified on Ethereum Mainnet. Falling back to Monad Testnet (chain ID 10143)...`);
+         const fallbackUrl = `https://api.etherscan.io/v2/api?module=contract&action=getsourcecode&address=${cleanAddress}&apikey=${apiKey}&chainid=10143`;
+         const fallbackResponse = await fetch(fallbackUrl, { signal: AbortSignal.timeout(8000) });
+         if (fallbackResponse.ok) {
+           const fallbackRawText = await fallbackResponse.text();
+           console.log(`[ETHERSCAN V2 FETCH] Fallback Raw Response Body: ${fallbackRawText}`);
+           const fallbackData = JSON.parse(fallbackRawText);
+           if (fallbackData.status === "1" && Array.isArray(fallbackData.result) && fallbackData.result.length > 0) {
+             data = fallbackData;
+           }
+         }
+       }
       
-      if (!response.ok) {
-        throw new Error(`Sourcify returned status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Standard Sourcify responses typically return list of files in different structures
-      let parsedFiles: { name: string; path: string; content: string }[] = [];
-      
-      if (Array.isArray(data)) {
-        parsedFiles = data.map((f: any) => ({
-          name: f.name || f.path.split("/").pop() || "Contract.sol",
-          path: f.path || f.name,
-          content: f.content
-        }));
-      } else if (data && Array.isArray(data.files)) {
-        parsedFiles = data.files.map((f: any) => ({
-          name: f.name || f.path.split("/").pop() || "Contract.sol",
-          path: f.path || f.name,
-          content: f.content
-        }));
-      } else if (data && typeof data === 'object') {
-        // Fallback for single-file response or other structures
-        const filesObj = data.files || data;
-        if (typeof filesObj === 'object') {
-          parsedFiles = Object.entries(filesObj).map(([key, val]: any) => ({
-            name: key.split("/").pop() || "Contract.sol",
-            path: key,
-            content: typeof val === 'string' ? val : (val.content || "")
-          }));
+      // Check if MonadScan returned a valid verified source code
+      if (data.status === "1" && Array.isArray(data.result) && data.result.length > 0) {
+        const contractData = data.result[0];
+        const sourceCode = contractData.SourceCode || "";
+        const contractName = contractData.ContractName || "";
+        
+        if (sourceCode.trim() !== "") {
+          const parsedFiles = parseSourceCode(sourceCode, contractName);
+          if (parsedFiles.length > 0) {
+            return res.json({
+              success: true,
+              source: "monadscan",
+              contractName: contractName || parsedFiles[0].name.replace(".sol", ""),
+              files: parsedFiles
+            });
+          }
         }
       }
-
-      if (parsedFiles.length === 0) {
-        throw new Error("No Solidity files found in Sourcify payload.");
-      }
-
-      return res.json({
-        success: true,
-        source: "sourcify",
-        contractName: parsedFiles[0].name.replace(".sol", ""),
-        files: parsedFiles
-      });
-    } catch (error: any) {
-      console.warn(`Sourcify fetch failed for ${cleanAddress}:`, error.message);
-      // Let's return fallback preloaded contract so the UX remains seamless
-      // We choose Monad Lending Pool as fallback but indicate it is preloaded fallback
+      
+      // If code execution reached here, the contract is not verified or has no source code
       return res.json({
         success: false,
-        error: `Could not retrieve verified Sourcify files for ${cleanAddress}. It may not be verified on Monad Testnet (Chain ID 10143). Loading a preloaded vulnerable template to demonstrate audit capability.`,
-        source: "fallback",
-        contractName: "Monad Lending Pool (Vulnerable Preset)",
-        files: PRELOADED_CONTRACTS["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"].files
+        error: "This contract is not verified on MonadScan, so source-level analysis isn't available. Try a verified address, or select one of our curated samples below."
+      });
+
+    } catch (error: any) {
+      console.warn(`MonadScan fetch failed for ${cleanAddress}:`, error.message);
+      return res.json({
+        success: false,
+        error: "This contract is not verified on MonadScan, so source-level analysis isn't available. Try a verified address, or select one of our curated samples below."
       });
     }
   });
@@ -955,6 +1040,67 @@ Scanning workspace files...
       status,
       output
     });
+  });
+
+  // --- API ROUTE: Lightweight DiffGuard Assistant (SSE Stream) ---
+  app.post("/api/assistant-chat", async (req, res) => {
+    const { messages, auditReport } = req.body;
+
+    if (!ai) {
+      return res.status(503).json({ error: "Gemini API integration is currently unavailable. Please configure GEMINI_API_KEY." });
+    }
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "messages array is required." });
+    }
+
+    try {
+      let systemPrompt = `You are DiffGuard's assistant. You help users understand smart contract security concepts and Monad's parallel execution model. You do not write new contracts or unrelated code. Keep answers concise and focused.`;
+
+      if (auditReport) {
+        systemPrompt += `\n\nActive Audit Report for Contract: ${auditReport.name || "Unknown"} (Score: ${auditReport.score || 0}/100)
+Findings:
+${(auditReport.findings || []).map((f: any) => `- [${f.severity.toUpperCase()}] ${f.title}: ${f.description}`).join('\n')}`;
+      }
+
+      // Convert messages to Google GenAI format (role: 'user' | 'model', parts: [{ text: string }])
+      const contents = messages.map((m: any) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }]
+      }));
+
+      // Stream response from Gemini using gemini-3.1-flash-lite
+      const responseStream = await ai.models.generateContentStream({
+        model: "gemini-3.1-flash-lite",
+        contents: contents,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.5,
+        }
+      });
+
+      // Set headers for Server-Sent Events (SSE)
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      for await (const chunk of responseStream) {
+        if (chunk.text) {
+          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        }
+      }
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (err: any) {
+      console.error("Error in assistant-chat SSE stream:", err);
+      // In case we haven't sent headers yet
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message || "Failed to generate stream" });
+      } else {
+        res.write(`data: ${JSON.stringify({ text: `\n\n[ERROR: ${err.message || "Stream broke during generation"}]` })}\n\n`);
+        res.end();
+      }
+    }
   });
 
   // --- Vite Middleware in Development ---

@@ -10,8 +10,11 @@ import ReconTool from "./components/ReconTool";
 import SandboxTab from "./components/SandboxTab";
 import NetworkSettings from "./components/NetworkSettings";
 import LandingPage from "./components/LandingPage";
+import NotebookTab from "./components/NotebookTab";
+import PluginsTab from "./components/PluginsTab";
 import { ActiveView, AuditReport, SourceFile, NetworkConfig } from "./types";
 import { ShieldCheck, Database, Terminal, Settings, Columns } from "lucide-react";
+import FloatingChat from "./components/FloatingChat";
 
 export default function App() {
   const [showLanding, setShowLanding] = useState<boolean>(true);
@@ -77,6 +80,7 @@ export default function App() {
   }, [networkConfig.rpcUrl]);
 
   const handleRunAudit = async (address: string) => {
+    console.error('🔴 AUDIT BUTTON CLICKED - HANDLER STARTED');
     if (!address.trim()) return;
     setLoading(true);
     setAuditReport(null);
@@ -88,8 +92,16 @@ export default function App() {
       // 1. Fetch source files from Monad blockvision/sourcify API
       const data = await safeFetchJson(`/api/monad-sourcify/${address}`);
       
+      if (data.success === false) {
+        setErrorNotification(data.error || "This contract is not verified on MonadScan, so source-level analysis isn't available. Try a verified address, or select one of our curated samples below.");
+        setLoading(false);
+        return;
+      }
+
       if (!data.files || data.files.length === 0) {
-        throw new Error(data.error || "No files could be parsed from the selected address");
+        setErrorNotification("No files could be parsed from the selected address");
+        setLoading(false);
+        return;
       }
 
       setFiles(data.files);
@@ -151,12 +163,18 @@ export default function App() {
             setFiles={setFiles}
             sidebarOpen={sidebarOpen}
             isAiFallback={isAiFallback}
+            errorNotification={errorNotification}
+            setErrorNotification={setErrorNotification}
           />
         );
       case "recon":
         return <ReconTool rpcUrl={networkConfig.rpcUrl} sidebarOpen={sidebarOpen} />;
       case "sandbox":
         return <SandboxTab sidebarOpen={sidebarOpen} />;
+      case "notebook":
+        return <NotebookTab sidebarOpen={sidebarOpen} />;
+      case "plugins":
+        return <PluginsTab />;
       case "settings":
         return (
           <NetworkSettings
@@ -217,6 +235,9 @@ export default function App() {
         <div id="content-viewport" className="flex-1 flex flex-col min-h-0 bg-monad-deep">
           {renderContent()}
         </div>
+
+        {/* Floating Chat Assistant */}
+        <FloatingChat auditReport={auditReport} />
       </main>
     </div>
   );

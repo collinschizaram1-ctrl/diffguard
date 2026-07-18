@@ -53,6 +53,24 @@ export interface NetworkConfig {
   name: string;
 }
 
-export type ActiveView = "audit" | "recon" | "sandbox" | "settings";
+export type ActiveView = "audit" | "recon" | "sandbox" | "settings" | "notebook" | "plugins";
+
+export interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  mode: "agent" | "plan";
+  createdAt: number;
+}
+
+export interface Chat {
+  id: string;
+  title: string;
+  projectId?: string;
+  messages: Message[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 
 

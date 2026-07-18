@@ -18,6 +18,8 @@ interface AuditTabProps {
   setFiles: (files: SourceFile[]) => void;
   sidebarOpen?: boolean;
   isAiFallback?: boolean;
+  errorNotification?: string | null;
+  setErrorNotification?: (msg: string | null) => void;
 }
 
 export default function AuditTab({
@@ -30,6 +32,8 @@ export default function AuditTab({
   setFiles,
   sidebarOpen,
   isAiFallback,
+  errorNotification,
+  setErrorNotification,
 }: AuditTabProps) {
   const [selectedFileIdx, setSelectedFileIdx] = useState<number>(0);
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
@@ -239,46 +243,74 @@ export default function AuditTab({
         {/* Left Side: Address form and code viewer */}
         <div className="flex-1 flex flex-col border-r border-[#222631] overflow-hidden">
           {/* Target contract input form */}
-          <div className="p-5 border-b border-[#222631] bg-[#0D0F14]">
-            <label className="block text-xs font-mono font-bold text-[#0088FF] uppercase tracking-wider mb-2">
-              Select Sample Contract to Audit
-            </label>
-            <div className="flex flex-col md:flex-row gap-3">
-              <select
-                value={contractAddress}
-                onChange={(e) => setContractAddress(e.target.value)}
-                className="flex-1 bg-[#14171E] border border-[#222631] rounded-xl px-4 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-[#0088FF] transition-colors cursor-pointer"
-              >
-                <option value="" disabled className="text-gray-600">-- Choose a curated vulnerability template --</option>
-                {presets.map((preset) => (
-                  <option key={preset.address} value={preset.address} className="bg-[#14171E] text-white">
-                    {preset.name} ({preset.address.slice(0, 6)}...{preset.address.slice(-4)})
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => onRunAudit(contractAddress)}
-                disabled={loading || !contractAddress}
-                className="bg-[#0088FF] hover:bg-[#1A8CFF] disabled:opacity-50 text-white font-display font-bold px-5 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/10 cursor-pointer transition-all shrink-0"
-              >
-                {loading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 fill-current" />
-                    Begin Audit
-                  </>
-                )}
-              </button>
+          <div className="p-5 border-b border-[#222631] bg-[#0D0F14] space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Curated Dropdown Option */}
+              <div className="flex flex-col">
+                <label className="block text-xs font-sans font-medium text-gray-400 mb-2">
+                  Select a Curated Sample Contract
+                </label>
+                <select
+                  value={presets.some(p => p.address.toLowerCase() === contractAddress.toLowerCase()) ? presets.find(p => p.address.toLowerCase() === contractAddress.toLowerCase())?.address : ""}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setContractAddress(e.target.value);
+                      onRunAudit(e.target.value);
+                    }
+                  }}
+                  className="w-full bg-[#14171E] border border-[#222631] rounded-xl px-4 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-[#0088FF] transition-colors cursor-pointer"
+                >
+                  <option value="" disabled className="text-gray-500">-- Choose template --</option>
+                  {presets.map((preset) => (
+                    <option key={preset.address} value={preset.address}>
+                      {preset.name} ({preset.address.slice(0, 6)}...{preset.address.slice(-4)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Free-text input option */}
+              <div className="flex flex-col">
+                <label className="block text-xs font-sans font-medium text-gray-400 mb-2">
+                  Or enter any verified Monad address
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={contractAddress}
+                    onChange={(e) => {
+                      setContractAddress(e.target.value);
+                      if (setErrorNotification) {
+                        setErrorNotification(null);
+                      }
+                    }}
+                    placeholder="Enter Monad testnet address (0x...)"
+                    className="flex-1 bg-[#14171E] border border-[#222631] rounded-xl px-4 py-2.5 text-sm font-mono text-white placeholder-gray-500 focus:outline-none focus:border-[#0088FF] transition-colors"
+                  />
+                  <button
+                    onClick={() => onRunAudit(contractAddress)}
+                    disabled={loading || !contractAddress.trim()}
+                    className="bg-[#0088FF] hover:bg-[#1A8CFF] disabled:opacity-50 text-white font-display font-bold px-4 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-blue-500/10 cursor-pointer transition-all shrink-0"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Begin Audit
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
-            
-            {/* Confident, honest label near input area */}
-            <p className="mt-3 text-[11px] text-gray-500 leading-normal flex items-start gap-2 font-sans select-none">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#0088FF] shrink-0 mt-1.5"></span>
-              <span>Demo mode: analyzing curated sample contracts representative of common Monad vulnerability patterns.</span>
+
+            <p className="text-[11px] text-gray-500 leading-normal flex items-center gap-1.5 font-sans select-none">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#0088FF] shrink-0"></span>
+              <span>Fully integrated with MonadScan API to fetch verified contract source codes dynamically.</span>
             </p>
           </div>
 
@@ -328,12 +360,24 @@ export default function AuditTab({
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-[#0D0F14]">
               <div className="w-14 h-14 rounded-full bg-[#202533]/30 flex items-center justify-center mb-4 border border-[#222631]/50">
-                <HelpCircle className="w-6 h-6 text-[#0088FF] animate-pulse" />
+                {errorNotification ? (
+                  <AlertTriangle className="w-6 h-6 text-amber-500 animate-bounce" />
+                ) : (
+                  <HelpCircle className="w-6 h-6 text-[#0088FF] animate-pulse" />
+                )}
               </div>
-              <h3 className="font-display font-bold text-base text-white mb-2">No Curated Contract Selected</h3>
-              <p className="text-xs text-gray-500 max-w-sm leading-relaxed">
-                Select one of our curated Monad vulnerability templates from the dropdown above to view and audit its verified contract files.
-              </p>
+              <h3 className="font-display font-bold text-base text-white mb-2">
+                {errorNotification ? "Contract Audit Unavailable" : "No Contract Selected"}
+              </h3>
+              <div className="text-xs text-gray-500 max-w-sm leading-relaxed">
+                {errorNotification ? (
+                  <div className="text-amber-400 bg-amber-500/10 border border-amber-500/20 px-4 py-3 rounded-xl font-mono text-left select-text mt-2 whitespace-normal break-words leading-relaxed shadow-lg">
+                    {errorNotification}
+                  </div>
+                ) : (
+                  "Enter a verified Monad contract address above, or choose one of our curated vulnerability templates from the dropdown to start the security audit."
+                )}
+              </div>
             </div>
           )}
         </div>
