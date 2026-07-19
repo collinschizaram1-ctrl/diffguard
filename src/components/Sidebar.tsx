@@ -80,7 +80,6 @@ export default function Sidebar({
           {/* Top Control Icons */}
           <div className="p-4 flex items-center justify-between border-b border-[#222631]/50 shrink-0">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="text-[11px] font-mono font-bold tracking-wider text-gray-400 uppercase">
                 Diff-Guard Sentry
               </span>

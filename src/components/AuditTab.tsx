@@ -308,10 +308,7 @@ export default function AuditTab({
               </div>
             </div>
 
-            <p className="text-[11px] text-gray-500 leading-normal flex items-center gap-1.5 font-sans select-none">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#0088FF] shrink-0"></span>
-              <span>Fully integrated with MonadScan API to fetch verified contract source codes dynamically.</span>
-            </p>
+
           </div>
 
           {/* Code panel header / tabs */}
