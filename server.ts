@@ -717,52 +717,104 @@ You MUST respond strictly in valid JSON format matching this schema:
 }`;
 
       try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: `Audit the following Solidity smart contract code for ${contractAddress}:\n\n${filesContentPrompt}`,
-          config: {
-            systemInstruction: systemPrompt,
-            temperature: 0.2,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              required: ["name", "score", "stats", "findings"],
-              properties: {
-                name: { type: Type.STRING },
-                score: { type: Type.INTEGER },
-                stats: {
-                  type: Type.OBJECT,
-                  required: ["critical", "high", "medium", "low", "gas", "info"],
-                  properties: {
-                    critical: { type: Type.INTEGER },
-                    high: { type: Type.INTEGER },
-                    medium: { type: Type.INTEGER },
-                    low: { type: Type.INTEGER },
-                    gas: { type: Type.INTEGER },
-                    info: { type: Type.INTEGER }
-                  }
-                },
-                findings: {
-                  type: Type.ARRAY,
-                  items: {
+        let response;
+        try {
+          console.log("[INFO] Attempting audit with gemini-3.1-flash-lite...");
+          response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: `Audit the following Solidity smart contract code for ${contractAddress}:\n\n${filesContentPrompt}`,
+            config: {
+              systemInstruction: systemPrompt,
+              temperature: 0.2,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                required: ["name", "score", "stats", "findings"],
+                properties: {
+                  name: { type: Type.STRING },
+                  score: { type: Type.INTEGER },
+                  stats: {
                     type: Type.OBJECT,
-                    required: ["id", "severity", "title", "description", "remediation", "filePath"],
+                    required: ["critical", "high", "medium", "low", "gas", "info"],
                     properties: {
-                      id: { type: Type.STRING },
-                      severity: { type: Type.STRING },
-                      title: { type: Type.STRING },
-                      description: { type: Type.STRING },
-                      remediation: { type: Type.STRING },
-                      filePath: { type: Type.STRING },
-                      line: { type: Type.INTEGER },
-                      codeSnippet: { type: Type.STRING }
+                      critical: { type: Type.INTEGER },
+                      high: { type: Type.INTEGER },
+                      medium: { type: Type.INTEGER },
+                      low: { type: Type.INTEGER },
+                      gas: { type: Type.INTEGER },
+                      info: { type: Type.INTEGER }
+                    }
+                  },
+                  findings: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      required: ["id", "severity", "title", "description", "remediation", "filePath"],
+                      properties: {
+                        id: { type: Type.STRING },
+                        severity: { type: Type.STRING },
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        remediation: { type: Type.STRING },
+                        filePath: { type: Type.STRING },
+                        line: { type: Type.INTEGER },
+                        codeSnippet: { type: Type.STRING }
+                      }
                     }
                   }
                 }
               }
             }
-          }
-        });
+          });
+        } catch (liteError: any) {
+          console.warn("[WARNING] gemini-3.1-flash-lite audit failed, trying gemini-3.5-flash fallback:", liteError.message);
+          response = await ai.models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: `Audit the following Solidity smart contract code for ${contractAddress}:\n\n${filesContentPrompt}`,
+            config: {
+              systemInstruction: systemPrompt,
+              temperature: 0.2,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                required: ["name", "score", "stats", "findings"],
+                properties: {
+                  name: { type: Type.STRING },
+                  score: { type: Type.INTEGER },
+                  stats: {
+                    type: Type.OBJECT,
+                    required: ["critical", "high", "medium", "low", "gas", "info"],
+                    properties: {
+                      critical: { type: Type.INTEGER },
+                      high: { type: Type.INTEGER },
+                      medium: { type: Type.INTEGER },
+                      low: { type: Type.INTEGER },
+                      gas: { type: Type.INTEGER },
+                      info: { type: Type.INTEGER }
+                    }
+                  },
+                  findings: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      required: ["id", "severity", "title", "description", "remediation", "filePath"],
+                      properties: {
+                        id: { type: Type.STRING },
+                        severity: { type: Type.STRING },
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        remediation: { type: Type.STRING },
+                        filePath: { type: Type.STRING },
+                        line: { type: Type.INTEGER },
+                        codeSnippet: { type: Type.STRING }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          });
+        }
 
         const text = response.text;
         if (text) {
@@ -928,23 +980,46 @@ Below is the complete file contents of the smart contract for reference:
 ${fileContent || targetCodeSnippet || "No contract content provided."}`;
 
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: userPrompt,
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.1,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            required: ["originalCode", "correctedCode"],
-            properties: {
-              originalCode: { type: Type.STRING },
-              correctedCode: { type: Type.STRING }
+      let response;
+      try {
+        console.log("[INFO] Attempting suggest-fix with gemini-3.1-flash-lite...");
+        response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.1,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              required: ["originalCode", "correctedCode"],
+              properties: {
+                originalCode: { type: Type.STRING },
+                correctedCode: { type: Type.STRING }
+              }
             }
           }
-        }
-      });
+        });
+      } catch (liteError: any) {
+        console.warn("[WARNING] gemini-3.1-flash-lite suggest-fix failed, trying gemini-3.5-flash fallback:", liteError.message);
+        response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.1,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              required: ["originalCode", "correctedCode"],
+              properties: {
+                originalCode: { type: Type.STRING },
+                correctedCode: { type: Type.STRING }
+              }
+            }
+          }
+        });
+      }
 
       const text = response.text;
       if (text) {

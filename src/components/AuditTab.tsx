@@ -79,12 +79,35 @@ export default function AuditTab({
   const handleSuggestFix = async (e: React.MouseEvent, finding: any) => {
     e.stopPropagation();
     const id = finding.id;
+    const findingId = finding.id;
     setSuggestedFixLoading(prev => ({ ...prev, [id]: true }));
     setSuggestedFixError(prev => ({ ...prev, [id]: null }));
 
     try {
-      const file = files.find(f => f.path === finding.filePath);
-      const fileContent = file ? file.content : "";
+      // Find the file from currently loaded files (either from preloaded or live fetch)
+      let file = files.find(f => f.path === finding.filePath);
+      
+      // Fallback: try finding by matching just the filename
+      if (!file && finding.filePath) {
+        const findingFileName = finding.filePath.split('/').pop()?.toLowerCase();
+        if (findingFileName) {
+          file = files.find(f => {
+            const currentFileName = f.path.split('/').pop()?.toLowerCase() || f.name.toLowerCase();
+            return currentFileName === findingFileName;
+          });
+        }
+      }
+      
+      // Secondary fallback: if still not found, use the first loaded file as default
+      if (!file && files.length > 0) {
+        file = files[0];
+      }
+
+      const contractSource = file ? file.content : "";
+      const fileContent = contractSource;
+
+      // Debug logging to confirm the lookup and source presence
+      console.error('🔴 SUGGEST FIX STARTED', findingId, contractSource ? 'source present' : 'source MISSING');
 
       // Extract target variable name dynamically from finding properties to prevent mixups
       let variableName = "";
